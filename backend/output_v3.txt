@@ -1,0 +1,3 @@
+Models imported. Creating tables...
+Tables created successfully.
+Tables in database: ['interview_sessions', 'interview_questions', 'chat_sessions', 'chat_messages', 'interview_answers', 'interview_evaluations', 'users', 'job_applications', 'resumes']
