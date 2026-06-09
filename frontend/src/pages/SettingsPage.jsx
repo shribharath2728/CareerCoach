@@ -2,8 +2,8 @@ import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { useApp } from '../context/AppContext'
 import { updateUserSettings } from '../services/api'
-import { GROQ_MODEL_OPTIONS, normalizeGroqModel } from '../constants/groqModels'
-import { MdSettings, MdPalette, MdLanguage, MdSmartToy, MdSettingsVoice } from 'react-icons/md'
+import { ALL_MODEL_OPTIONS, normalizeGroqModel, MODEL_LABELS } from '../constants/groqModels'
+import { MdSettings, MdPalette, MdLanguage, MdSmartToy, MdSettingsVoice, MdPsychology } from 'react-icons/md'
 
 export default function SettingsPage() {
   const { user, setUser, addToast } = useApp()
@@ -46,7 +46,7 @@ export default function SettingsPage() {
       <div className="card">
         <h2><MdSettings /> App Settings</h2>
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 20, marginTop: 24 }}>
-          
+
           <div className="form-group">
             <label><MdPalette /> Theme</label>
             <select value={config.theme} onChange={e => setC('theme', e.target.value)}>
@@ -61,15 +61,13 @@ export default function SettingsPage() {
               value={normalizeGroqModel(config.ai_model)}
               onChange={e => setC('ai_model', e.target.value)}
             >
-              {GROQ_MODEL_OPTIONS.map((id) => (
-                <option key={id} value={id}>
-                  {id === 'llama-3.3-70b-versatile' && 'Llama 3.3 70B — balanced (recommended)'}
-                  {id === 'llama-3.1-8b-instant' && 'Llama 3.1 8B — fastest'}
-                  {id === 'meta-llama/llama-4-scout-17b-16e-instruct' && 'Llama 4 Scout — long context'}
-                  {id === 'meta-llama/llama-4-maverick-17b-128e-instruct' && 'Llama 4 Maverick — deeper reasoning'}
-                </option>
+              {['llama-3.3-70b-versatile', 'llama-3.1-8b-instant', 'meta-llama/llama-4-scout-17b-16e-instruct', 'meta-llama/llama-4-maverick-17b-128e-instruct'].map(id => (
+                <option key={id} value={id}>{MODEL_LABELS[id]}</option>
               ))}
             </select>
+            <div style={{ fontSize: '0.72rem', color: 'rgba(0,245,255,0.45)', marginTop: 5, fontFamily: "'Exo 2', sans-serif" }}>
+              All models are powered by Groq free tier.
+            </div>
           </div>
 
           <div className="form-group">
@@ -92,6 +90,37 @@ export default function SettingsPage() {
                 <option key={i} value={v.name}>{v.name} ({v.lang})</option>
               ))}
             </select>
+          </div>
+
+          <div className="form-group">
+            <label><MdPsychology /> AI Coach Personality Mode</label>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 10, marginTop: 4 }}>
+              {[
+                { value: 'supportive', icon: '🤝', label: 'Supportive Mentor', desc: 'Encouraging & motivational' },
+                { value: 'strict', icon: '🎯', label: 'Strict Corporate', desc: 'Harsh but realistic' },
+                { value: 'academic', icon: '🎓', label: 'Academic Coach', desc: 'Structured & criteria-based' },
+                { value: 'speed_drill', icon: '⚡', label: 'Speed Drill', desc: 'Rapid-fire short answers' },
+              ].map(m => {
+                const active = (config.coaching_style || 'supportive') === m.value
+                return (
+                  <button
+                    key={m.value}
+                    type="button"
+                    onClick={() => setC('coaching_style', m.value)}
+                    style={{
+                      padding: '12px 14px', borderRadius: 12, textAlign: 'left',
+                      border: `2px solid ${active ? 'var(--primary)' : 'var(--glass-border)'}`,
+                      background: active ? 'rgba(99,102,241,0.08)' : 'var(--surface-2)',
+                      cursor: 'pointer', transition: 'all 0.2s', display: 'flex', flexDirection: 'column', gap: 4,
+                    }}
+                  >
+                    <span style={{ fontSize: '1.4rem' }}>{m.icon}</span>
+                    <span style={{ fontWeight: 700, fontSize: '0.82rem', color: active ? 'var(--primary)' : 'var(--text-primary)' }}>{m.label}</span>
+                    <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{m.desc}</span>
+                  </button>
+                )
+              })}
+            </div>
           </div>
 
           <button type="submit" className="btn btn-primary" disabled={loading}>
