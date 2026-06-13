@@ -47,7 +47,7 @@ export default function EvaluationPanel({ evaluation }) {
         </div>
 
         <div>
-          <h3 style={{ fontFamily: 'Outfit', fontSize: '1.2rem', marginBottom: 4 }}>Evaluation Summary</h3>
+          <h3 style={{ fontFamily: 'var(--font-heading)', fontSize: '1.2rem', marginBottom: 4 }}>Evaluation Summary</h3>
           <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
             Hiring Signal: <strong style={{ color: 'var(--text-primary)', textTransform: 'capitalize' }}>{hiring_signal}</strong> |
             Recommended Diff.: <strong style={{ color: 'var(--text-primary)', textTransform: 'capitalize' }}>{difficulty_recommendation}</strong>

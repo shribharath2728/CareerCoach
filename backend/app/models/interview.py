@@ -17,6 +17,7 @@ class InterviewSession(Base):
     role = Column(String, nullable=True)
     interview_type = Column(String, nullable=True)
     difficulty = Column(String, nullable=True)
+    field_of_study = Column(String, nullable=True) # Context at session start
 
     user = relationship("User", back_populates="interview_sessions")
     job_application = relationship("JobApplication", back_populates="interview_sessions")

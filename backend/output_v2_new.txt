@@ -1,1 +1,0 @@
-Error: cannot import name 'Evaluation' from 'app.models.interview_evaluation' (E:\career-assistant-ai\backend\app\models\interview_evaluation.py)

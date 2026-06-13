@@ -8,6 +8,8 @@ class LinkedInProfile(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     profile_url = Column(String, nullable=False)
+    headline = Column(String, nullable=True)
+    industry = Column(String, nullable=True)
     summary = Column(Text)
     experience = Column(Text)
     education = Column(Text)

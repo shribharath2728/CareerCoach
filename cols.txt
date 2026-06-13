@@ -1,1 +1,0 @@
-id,full_name,email,ai_name,theme,created_at,password_hash,ai_model,ai_language,ai_voice,is_guest

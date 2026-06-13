@@ -86,6 +86,24 @@ def ensure_schema(engine: Engine) -> None:
         "created_at",
         "ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT NOW()",
     )
+    # New: Ensure 'theme' column exists and has a default value for old DBs
+    _safe_add(
+        engine,
+        "users",
+        "theme",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS theme VARCHAR NOT NULL DEFAULT 'dark'",
+    )
+    _pg_exec_ignore(engine, "ALTER TABLE users ALTER COLUMN theme SET DEFAULT 'dark'")
+    _pg_exec_ignore(engine, "UPDATE users SET theme = 'dark' WHERE theme IS NULL")
+    
+    _safe_add(
+        engine,
+        "users",
+        "telegram_id",
+        "ALTER TABLE users ADD COLUMN IF NOT EXISTS telegram_id VARCHAR UNIQUE",
+    )
+    # New: Data Migration for legacy passwords
+    _migrate_user_passwords(engine)
 
     # chat_sessions
     _safe_add(
@@ -171,6 +189,8 @@ def ensure_schema(engine: Engine) -> None:
     _ensure_job_applications_columns(engine)
     _ensure_interview_sessions_job_application(engine)
     _ensure_interview_sessions_dates(engine)
+    _initialize_rag_knowledge_defaults(engine)
+    _ensure_live_data_cache_tables(engine)
 
 def _ensure_interview_sessions_dates(engine: Engine) -> None:
     """Ensure session_date is populated from created_at if it exists."""
@@ -319,6 +339,10 @@ def _ensure_job_applications_columns(engine: Engine) -> None:
                 """
             )
         )
+    _pg_exec_ignore(engine, "ALTER TABLE job_applications ALTER COLUMN company DROP NOT NULL")
+    _pg_exec_ignore(engine, "ALTER TABLE job_applications ALTER COLUMN role DROP NOT NULL")
+    _pg_exec_ignore(engine, "ALTER TABLE job_applications ALTER COLUMN applied_date DROP NOT NULL")
+    _pg_exec_ignore(engine, "ALTER TABLE job_applications ALTER COLUMN " + '"position"' + " DROP NOT NULL")
 
 
 def _ensure_interview_sessions_job_application(engine: Engine) -> None:
@@ -416,3 +440,200 @@ def _ensure_chat_messages(engine: Engine) -> None:
 
     _pg_exec_ignore(engine, "ALTER TABLE chat_messages ALTER COLUMN sender DROP NOT NULL")
     _pg_exec_ignore(engine, "ALTER TABLE chat_messages ALTER COLUMN message DROP NOT NULL")
+
+def _migrate_user_passwords(engine: Engine) -> None:
+    """If 'password_hash' has data but 'hashed_password' is NULL, copy it."""
+    insp = inspect(engine)
+    if "users" not in insp.get_table_names():
+        return
+    cols = {c["name"] for c in insp.get_columns("users")}
+    if "password_hash" in cols and "hashed_password" in cols:
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    """
+                    UPDATE users
+                    SET hashed_password = password_hash
+                    WHERE (hashed_password IS NULL OR hashed_password = '')
+                      AND (password_hash IS NOT NULL AND password_hash <> '')
+                    """
+                )
+            )
+            logger.info("Migrated legacy password hashes to new hashed_password column.")
+
+
+def _initialize_rag_knowledge_defaults(engine: Engine) -> None:
+    """Initialize RAG knowledge base with default career knowledge entries."""
+    insp = inspect(engine)
+    if "rag_knowledge" not in insp.get_table_names():
+        logger.info("RAG knowledge table not found, skipping initialization")
+        return
+    
+    try:
+        from sqlalchemy.orm import sessionmaker
+        Session = sessionmaker(bind=engine)
+        session = Session()
+        
+        # Check if defaults are already loaded
+        count = session.query(text("COUNT(*)")).from_statement(
+            text("SELECT COUNT(*) FROM rag_knowledge WHERE source = 'default'")
+        ).scalar()
+        
+        if count and count > 0:
+            logger.info(f"RAG knowledge already initialized with {count} default entries")
+            session.close()
+            return
+        
+        # Insert defaults
+        from app.services import rag_service
+        defaults = rag_service._get_default_knowledge_base()
+        
+        from app.models.rag_knowledge import RAGKnowledge
+        for default in defaults:
+            # Check if entry already exists by ID
+            existing = session.query(RAGKnowledge).filter_by(id=default.get("id")).first()
+            if not existing:
+                entry = RAGKnowledge(
+                    id=default.get("id"),
+                    category=default["category"],
+                    tags=",".join(default.get("tags", [])),
+                    content=default["text"],
+                    source=default.get("source", "default"),
+                    is_active=True
+                )
+                session.add(entry)
+        
+        session.commit()
+        logger.info(f"Initialized RAG knowledge with {len(defaults)} default career entries")
+        session.close()
+    except Exception as e:
+        logger.warning(f"Could not initialize RAG knowledge defaults: {e}")
+
+
+def _ensure_live_data_cache_tables(engine: Engine) -> None:
+    """
+    Create live_data_cache and live_data_sources tables if they don't exist.
+    
+    Non-breaking migration: Only adds new tables, no modifications to existing tables.
+    """
+    insp = inspect(engine)
+    tables_to_create = insp.get_table_names()
+    
+    # Create live_data_cache table if it doesn't exist
+    if "live_data_cache" not in tables_to_create:
+        try:
+            _exec(
+                engine,
+                """
+                CREATE TABLE IF NOT EXISTS live_data_cache (
+                    id SERIAL PRIMARY KEY,
+                    key VARCHAR(255) NOT NULL UNIQUE,
+                    data JSONB NOT NULL,
+                    source VARCHAR(100) NOT NULL,
+                    retrieved_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                    ttl_hours INTEGER NOT NULL DEFAULT 24,
+                    confidence_score FLOAT NOT NULL DEFAULT 0.5,
+                    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                    updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+                )
+                """
+            )
+            logger.info("Created live_data_cache table")
+        except Exception as e:
+            logger.warning(f"Could not create live_data_cache table: {e}")
+    
+    # Create indexes for live_data_cache if they don't exist
+    try:
+        _exec(
+            engine,
+            """
+            CREATE INDEX IF NOT EXISTS idx_live_data_cache_key 
+            ON live_data_cache(key)
+            """
+        )
+        logger.info("Created index idx_live_data_cache_key")
+    except Exception as e:
+        logger.debug(f"Index idx_live_data_cache_key already exists or error: {e}")
+    
+    try:
+        _exec(
+            engine,
+            """
+            CREATE INDEX IF NOT EXISTS idx_live_data_cache_source 
+            ON live_data_cache(source)
+            """
+        )
+        logger.info("Created index idx_live_data_cache_source")
+    except Exception as e:
+        logger.debug(f"Index idx_live_data_cache_source already exists or error: {e}")
+    
+    try:
+        _exec(
+            engine,
+            """
+            CREATE INDEX IF NOT EXISTS idx_live_data_cache_retrieved_at 
+            ON live_data_cache(retrieved_at)
+            """
+        )
+        logger.info("Created index idx_live_data_cache_retrieved_at")
+    except Exception as e:
+        logger.debug(f"Index idx_live_data_cache_retrieved_at already exists or error: {e}")
+    
+    try:
+        _exec(
+            engine,
+            """
+            CREATE INDEX IF NOT EXISTS idx_live_data_cache_source_retrieved 
+            ON live_data_cache(source, retrieved_at)
+            """
+        )
+        logger.info("Created index idx_live_data_cache_source_retrieved")
+    except Exception as e:
+        logger.debug(f"Index idx_live_data_cache_source_retrieved already exists or error: {e}")
+    
+    # Create live_data_sources table if it doesn't exist
+    if "live_data_sources" not in tables_to_create:
+        try:
+            _exec(
+                engine,
+                """
+                CREATE TABLE IF NOT EXISTS live_data_sources (
+                    id SERIAL PRIMARY KEY,
+                    name VARCHAR(100) NOT NULL UNIQUE,
+                    endpoint VARCHAR(500) NOT NULL,
+                    api_key_env VARCHAR(100),
+                    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+                    rate_limit_per_minute INTEGER NOT NULL DEFAULT 60,
+                    created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                    updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+                )
+                """
+            )
+            logger.info("Created live_data_sources table")
+        except Exception as e:
+            logger.warning(f"Could not create live_data_sources table: {e}")
+    
+    # Create indexes for live_data_sources if they don't exist
+    try:
+        _exec(
+            engine,
+            """
+            CREATE INDEX IF NOT EXISTS idx_live_data_sources_name 
+            ON live_data_sources(name)
+            """
+        )
+        logger.info("Created index idx_live_data_sources_name")
+    except Exception as e:
+        logger.debug(f"Index idx_live_data_sources_name already exists or error: {e}")
+    
+    try:
+        _exec(
+            engine,
+            """
+            CREATE INDEX IF NOT EXISTS idx_live_data_sources_enabled 
+            ON live_data_sources(enabled)
+            """
+        )
+        logger.info("Created index idx_live_data_sources_enabled")
+    except Exception as e:
+        logger.debug(f"Index idx_live_data_sources_enabled already exists or error: {e}")

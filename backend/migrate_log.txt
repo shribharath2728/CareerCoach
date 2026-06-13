@@ -1,4 +1,0 @@
-Starting migration...
-Connecting to: postgresql://postgres:shri01@localhost:5432/career_assistant_db
-Column 'session_date' already exists.
-Database migration complete.

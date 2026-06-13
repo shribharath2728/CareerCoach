@@ -51,14 +51,41 @@ export function useVoiceInput({ onResult, onError } = {}) {
 
 const synth = window.speechSynthesis
 
-export function speak(text, { rate = 1, pitch = 1, volume = 0.9, voice = null } = {}) {
+export function speak(text, { rate = 1, pitch = 1, volume = 0.9, voice = null, onEnd = null } = {}) {
   if (!synth) return
   synth.cancel()
-  const utt = new SpeechSynthesisUtterance(text)
+  
+  // Clean markdown and formatting characters to prevent text-to-speech from pronouncing them (e.g. reading * as "asterisk")
+  const cleanedText = String(text || '')
+    .replace(/\*+/g, '') // Remove asterisks
+    .replace(/#+/g, '') // Remove header markers
+    .replace(/_+/g, '') // Remove underscores
+    .replace(/`+/g, '') // Remove inline code ticks
+    .replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1') // Remove markdown links, keep text
+    .replace(/[-+•\t]+/g, ' ') // Normalize bullet markers and tabs
+    .replace(/\s+/g, ' ') // Normalize spaces
+    .trim()
+
+  const utt = new SpeechSynthesisUtterance(cleanedText)
   utt.rate   = rate
   utt.pitch  = pitch
   utt.volume = volume
-  if (voice) utt.voice = voice
+
+  if (voice) {
+    if (typeof voice === 'string') {
+      const selectedVoice = synth.getVoices().find(v => v.name === voice)
+      if (selectedVoice) {
+        utt.voice = selectedVoice
+      }
+    } else {
+      utt.voice = voice
+    }
+  }
+
+  if (onEnd) {
+    utt.onend = onEnd
+  }
+
   synth.speak(utt)
 }
 

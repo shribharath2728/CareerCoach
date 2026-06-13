@@ -1,21 +1,23 @@
+"""
+groq_services.py — CareerCoach AI
+Handles structured JSON generation tasks: interview questions, answer evaluation,
+resume/JD comparison, and career opportunity suggestions.
+
+All AI calls now go through the unified ai_provider.chat_complete() which
+auto-selects Gemini or Groq and falls back between them.
+"""
 import json
-import os
 import re
 from typing import Any, Dict, List, Optional
 
-from groq import Groq
+from app.core.ai_provider import chat_complete
 
-from app.core.groq_models import resolve_groq_model
-
-def _client() -> Groq:
-    key = os.getenv("GROQ_API_KEY")
-    if not key:
-        raise RuntimeError("GROQ_API_KEY is not set")
-    base = os.getenv("GROQ_BASE_URL", "https://api.groq.com")
-    return Groq(api_key=key, base_url=base)
 
 def _extract_json_object(text: str) -> Dict[str, Any]:
     text = text.strip()
+    # Strip markdown fences if present
+    text = re.sub(r"^```(?:json)?\s*", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"\s*```$", "", text)
     try:
         return json.loads(text)
     except json.JSONDecodeError:
@@ -27,6 +29,7 @@ def _extract_json_object(text: str) -> Dict[str, Any]:
         except json.JSONDecodeError:
             pass
     raise ValueError("Model did not return valid JSON")
+
 
 def default_evaluation(answer: str) -> Dict[str, Any]:
     return {
@@ -51,54 +54,67 @@ def default_evaluation(answer: str) -> Dict[str, Any]:
         "follow_up_question": "Can you try answering the question again in your own words?",
     }
 
+
 def generate_interview_question(
     role: str,
     interview_type: str,
     difficulty: str,
+    field_of_study: Optional[str] = None,
     model: Optional[str] = None,
     previous_questions: Optional[List[str]] = None,
+    coaching_style: Optional[str] = None,
 ) -> Dict[str, Any]:
-    model_id = resolve_groq_model(model)
     prev = ""
     if previous_questions:
         prev = f"\nDO NOT repeat or overlap with these previous questions: {json.dumps(previous_questions)}"
 
-    system = (
-        "You are an expert interviewer. Return ONLY valid JSON, no markdown. "
-        "Do not add any text outside JSON."
-    )
-    user = json.dumps(
-        {
-            "question_text": "",
-            "expected_answer_points": [],
-            "category": "",
-            "difficulty": difficulty,
-        }
-    )
+    style_map = {
+        "strict":      "Be a rigorous, demanding interviewer. Ask tough follow-ups.",
+        "supportive":  "Be encouraging and supportive. Frame questions positively.",
+        "academic":    "Use structured, criteria-based academic framing.",
+        "speed_drill": "Keep questions short and punchy for rapid-fire practice.",
+    }
+    style_hint = style_map.get(coaching_style or "supportive", "")
+
+    field_context = ""
+    if field_of_study:
+        field_context = f"The candidate's field of study is {field_of_study}. "
+        if "arts" in field_of_study.lower() or "literature" in field_of_study.lower():
+            field_context += "Focus on how their skills (communication, critical thinking, creativity) transfer to the corporate role."
+
+    empty_shape = json.dumps({
+        "question_text": "",
+        "expected_answer_points": [],
+        "category": "",
+        "difficulty": difficulty,
+    })
+
     prompt = f"""Generate exactly one interview question.{prev}
 Rules:
 - Match role: {role}, type: {interview_type}, difficulty: {difficulty}
+- {field_context}
 - expected_answer_points: 4-6 short bullet-style points
-- category should be like: backend, databases, api, system_design, hr, behavioral, debugging, ops
+- category: backend, databases, api, system_design, hr, behavioral, debugging, ops
 Use this JSON shape (fill all fields):
-{user}
+{empty_shape}
 """
+
     try:
-        res = _client().chat.completions.create(
-            model=model_id,
+        raw = chat_complete(
+            messages=[{"role": "user", "content": prompt}],
+            system_prompt=(
+                "You are an expert interviewer. " + style_hint +
+                " Return ONLY valid JSON, no markdown. Do not add any text outside JSON."
+            ),
+            model_hint=model,
             temperature=0.7,
-            messages=[
-                {"role": "system", "content": system},
-                {"role": "user", "content": prompt},
-            ],
+            max_tokens=800,
         )
-        content = res.choices[0].message.content or ""
-        parsed = _extract_json_object(content)
+        parsed = _extract_json_object(raw)
     except Exception as e:
-        # Fallback question if API fails
         return {
-            "question_text": f"Could you describe a recent project where you played a key role? (Fallback due to: {str(e)[:50]}...)",
-            "expected_answer_points": ["Context/Situation", "Action taken", "Personal contribution", "Outcome"],
+            "question_text": f"Describe a recent project where you played a key role. (Fallback: {str(e)[:50]})",
+            "expected_answer_points": ["Situation", "Task", "Action", "Result"],
             "category": "behavioral",
             "difficulty": difficulty,
         }
@@ -122,15 +138,31 @@ def evaluate_interview_answer(
     difficulty: str = "medium",
     interview_type: str = "technical",
     model: Optional[str] = None,
+    coaching_style: Optional[str] = None,
 ) -> Dict[str, Any]:
     if not (answer or "").strip():
         return default_evaluation(answer or "")
-    model_id = resolve_groq_model(model)
+
+    style_map = {
+        "strict":      "Be harsh but fair. Highlight every gap.",
+        "supportive":  "Be encouraging. Focus on strengths while noting improvements.",
+        "academic":    "Evaluate using structured academic criteria.",
+        "speed_drill": "Keep feedback very brief and direct.",
+    }
+    style_hint = style_map.get(coaching_style or "supportive", "")
     expected_points = expected_points or []
+
     system = (
-        "You evaluate interview answers. Reply with ONLY valid JSON matching the schema. "
-        "Scores are integers 0-100."
+        "You evaluate interview answers. " + style_hint +
+        " Reply with ONLY valid JSON matching the schema. Scores are integers 0-100."
     )
+    if interview_type == "communication":
+        system += (
+            " This is a Communication Practice session. Evaluate delivery, pronunciation, "
+            "pace, fluency, filler words, structure, confidence, and clarity. "
+            "Technical correctness is secondary."
+        )
+
     user = f"""Role: {role}
 Interview type: {interview_type}
 Difficulty: {difficulty}
@@ -144,17 +176,16 @@ hiring_signal (weak|moderate|strong), difficulty_recommendation (easier|same|har
 problem_solving_score, technical_score, communication_score, structure_score,
 completeness_score, confidence_score, follow_up_question (string or null)
 """
+
     try:
-        res = _client().chat.completions.create(
-            model=model_id,
+        raw = chat_complete(
+            messages=[{"role": "user", "content": user}],
+            system_prompt=system,
+            model_hint=model,
             temperature=0.2,
-            messages=[
-                {"role": "system", "content": system},
-                {"role": "user", "content": user},
-            ],
+            max_tokens=1000,
         )
-        content = res.choices[0].message.content or ""
-        parsed = _extract_json_object(content)
+        parsed = _extract_json_object(raw)
     except Exception:
         return default_evaluation(answer)
 
@@ -166,19 +197,14 @@ completeness_score, confidence_score, follow_up_question (string or null)
     parsed.setdefault("hiring_signal", "weak")
     parsed.setdefault("difficulty_recommendation", "same")
     for k in (
-        "problem_solving_score",
-        "technical_score",
-        "communication_score",
-        "structure_score",
-        "completeness_score",
-        "confidence_score",
+        "problem_solving_score", "technical_score", "communication_score",
+        "structure_score", "completeness_score", "confidence_score",
     ):
         parsed.setdefault(k, 0)
     return parsed
 
+
 def analyze_resume_vs_jd(resume_content: str, jd_text: str, model: Optional[str] = None) -> Dict[str, Any]:
-    model_id = resolve_groq_model(model)
-    system = "You are an expert ATS and recruiter assistant. Reply with ONLY valid JSON."
     user = f"""Compare this resume to the job description.
 
 Resume:
@@ -193,18 +219,67 @@ missing_keywords (array of strings),
 suggestions (array of strings),
 summary (string)
 """
-    res = _client().chat.completions.create(
-        model=model_id,
-        temperature=0.2,
-        messages=[
-            {"role": "system", "content": system},
-            {"role": "user", "content": user},
-        ],
-    )
-    content = res.choices[0].message.content or ""
-    parsed = _extract_json_object(content)
-    parsed.setdefault("match_percentage", 0)
-    parsed.setdefault("missing_keywords", [])
-    parsed.setdefault("suggestions", [])
-    parsed.setdefault("summary", "")
-    return parsed
+    try:
+        raw = chat_complete(
+            messages=[{"role": "user", "content": user}],
+            system_prompt="You are an expert ATS and recruiter assistant. Reply with ONLY valid JSON.",
+            model_hint=model,
+            temperature=0.2,
+            max_tokens=1000,
+        )
+        parsed = _extract_json_object(raw)
+        parsed.setdefault("match_percentage", 0)
+        parsed.setdefault("missing_keywords", [])
+        parsed.setdefault("suggestions", [])
+        parsed.setdefault("summary", "")
+        return parsed
+    except Exception:
+        return {"match_percentage": 0, "missing_keywords": [], "suggestions": [], "summary": "Analysis unavailable."}
+
+
+def suggest_career_opportunities(
+    field_of_study: str,
+    education_level: Optional[str] = None,
+    model: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    """Suggest MNC roles and career pathways based on field of study."""
+    prompt = f"""Suggest 5 innovative corporate/MNC job roles for a candidate with a background in: {field_of_study} ({education_level or 'Undergraduate'}).
+
+For each role, provide:
+- role_title (string)
+- description (string, why it fits their major)
+- key_skills_to_highlight (list of strings)
+- typical_salary_range (string)
+- mnc_companies (list of examples)
+
+Return ONLY a valid JSON array of objects in this exact format:
+[
+  {{
+    "role_title": "UX Writer",
+    "description": "Your literature background helps in creating clear, empathetic microcopy.",
+    "key_skills_to_highlight": ["Storytelling", "Editing", "User Research"],
+    "typical_salary_range": "$60k - $120k",
+    "mnc_companies": ["Google", "Spotify", "Microsoft"]
+  }}
+]
+"""
+    try:
+        raw = chat_complete(
+            messages=[{"role": "user", "content": prompt}],
+            system_prompt="You are an expert career consultant. Return ONLY valid JSON as a list of objects.",
+            model_hint=model,
+            temperature=0.7,
+            max_tokens=1500,
+        )
+        # Try to parse as list first, then as dict with "opportunities" key
+        text = raw.strip()
+        text = re.sub(r"^```(?:json)?\s*", "", text, flags=re.IGNORECASE)
+        text = re.sub(r"\s*```$", "", text)
+        parsed = json.loads(text)
+        if isinstance(parsed, dict) and "opportunities" in parsed:
+            return parsed["opportunities"]
+        if isinstance(parsed, list):
+            return parsed
+        return []
+    except Exception:
+        return []

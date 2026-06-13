@@ -88,7 +88,7 @@ export default function JDAnalyzer() {
                     ) : (
                       <MdWarning size={48} color="var(--warning)" />
                     )}
-                    <span style={{ fontSize: '3.5rem', fontWeight: 800, fontFamily: 'Outfit', color: result.match_percentage >= 75 ? 'var(--success)' : 'var(--warning)' }}>
+                    <span style={{ fontSize: '3.5rem', fontWeight: 800, fontFamily: 'var(--font-heading)', color: result.match_percentage >= 75 ? 'var(--success)' : 'var(--warning)' }}>
                       {result.match_percentage}%
                     </span>
                   </div>

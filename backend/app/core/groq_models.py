@@ -13,6 +13,9 @@ DEPRECATED_GROQ_MODELS: Dict[str, str] = {
     "llama3-8b-8192": "llama-3.1-8b-instant",
     "gemma-7b-it": DEFAULT_CHAT_MODEL,
     "gemma2-9b-it": DEFAULT_CHAT_MODEL,
+    # Llama 4 IDs - currently causing 404s for some API keys
+    "meta-llama/llama-4-scout-17b-16e-instruct": DEFAULT_CHAT_MODEL,
+    "meta-llama/llama-4-maverick-17b-128e-instruct": DEFAULT_CHAT_MODEL,
 }
 
 def resolve_groq_model(requested: str | None) -> str:

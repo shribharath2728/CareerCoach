@@ -76,7 +76,7 @@ def send_chat_message(message: ChatMessageCreate, db: Session = Depends(get_db))
     ]
 
     try:
-        ai_content = get_ai_response(message_list, model_hint=model_hint)
+        ai_content = get_ai_response(message_list, model_hint=model_hint, db=db)
     except Exception as e:
         logger.exception("Groq/OpenAI chat completion failed")
         raise HTTPException(

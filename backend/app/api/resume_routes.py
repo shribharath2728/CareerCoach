@@ -12,7 +12,8 @@ router = APIRouter()
 def get_user_resume(user_id: int, db: Session = Depends(get_db)):
     r = db.query(Resume).filter(Resume.user_id == user_id).order_by(Resume.updated_at.desc()).first()
     if not r:
-        raise HTTPException(status_code=404, detail="No resume found")
+        # Return empty resume instead of 404 to avoid confusing terminal logs
+        return Resume(id=0, user_id=user_id, title="New Resume", content="")
     return r
 
 @router.put("/", response_model=ResumeResponse)
@@ -37,8 +38,8 @@ def analyze_jd(user_id: int, body: JDAnalyzeRequest, db: Session = Depends(get_d
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     resume = db.query(Resume).filter(Resume.user_id == user_id).order_by(Resume.updated_at.desc()).first()
-    if not resume:
-        raise HTTPException(status_code=400, detail="Save a resume first")
+    if not resume or not (resume.content or "").strip():
+        raise HTTPException(status_code=400, detail="Your resume is empty. Please add and save your resume in the Resume Builder first.")
     try:
         data = groq_services.analyze_resume_vs_jd(resume.content, body.jd_text, model=user.ai_model)
     except Exception as e:

@@ -12,10 +12,10 @@ function apiErrorMessage(err) {
     if (Array.isArray(d)) return d.map((e) => e?.msg || JSON.stringify(e)).join('; ')
   }
   if (err.code === 'ECONNABORTED' || err.message?.toLowerCase().includes('timeout')) {
-    return 'Request timed out. Check that the SkillLens API is running (port 8000).'
+    return 'Request timed out. Check that the CareerCoach API is running (port 8000).'
   }
   if (!err.response && err.message === 'Network Error') {
-    return 'Cannot reach the API. Start the backend: `cd backend` then `uvicorn app.main:app --reload --host 127.0.0.1 --port 8000`. Keep the UI on `npm run dev` (Vite proxies /api). Then refresh.'
+    return 'Cannot reach the CareerCoach API. Start the backend: `uvicorn app.main:app --reload --host 127.0.0.1 --port 8000`. Then refresh.'
   }
   return err.message || 'Request failed'
 }
@@ -23,12 +23,12 @@ function apiErrorMessage(err) {
 export default function Chat() {
   const { user, addToast } = useApp()
   const [messages, setMessages] = useState([
-    { id: 1, sender: 'ai', text: `Hi ${user.full_name.split(' ')[0]}! I'm ${user.ai_name}, your SkillLens coach. How can I help you today?` }
+    { id: 1, sender: 'ai', text: `Hi ${user.full_name.split(' ')[0]}! I'm ${user.ai_name}, your CareerCoach AI. How can I help you today?` }
   ])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [ttsOn, setTtsOn] = useState(false)
-  
+
   const bottomRef = useRef(null)
 
   // API Integration for chat session
@@ -44,7 +44,7 @@ export default function Chat() {
       setInput(t)
       handleSendRef.current?.(t)
     },
-    onError:  (e) => addToast(`Voice error: ${e}`, 'error'),
+    onError: (e) => addToast(`Voice error: ${e}`, 'error'),
   })
 
   // Auto scroll
@@ -80,7 +80,7 @@ export default function Chat() {
         text: m.message
       }))
       setMessages(mapped.length > 0 ? mapped : [
-        { id: 'welcome', sender: 'ai', text: `Hi ${user.full_name.split(' ')[0]}! I'm ${user.ai_name}, your SkillLens coach. How can I help you today?` }
+        { id: 'welcome', sender: 'ai', text: `Hi ${user.full_name.split(' ')[0]}! I'm ${user.ai_name}, your CareerCoach AI. How can I help you today?` }
       ])
     } catch (err) {
       addToast('Failed to load messages', 'error')
@@ -162,20 +162,20 @@ export default function Chat() {
 
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
-       e.preventDefault()
-       handleSend()
+      e.preventDefault()
+      handleSend()
     }
   }
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '260px 1fr', height: 'calc(100vh - 120px)', gap: 16 }}>
-      
+
       {/* Session Sidebar */}
       <div className="card" style={{ display: 'flex', flexDirection: 'column', padding: 0, overflow: 'hidden' }}>
-        <div style={{ padding: '16px 14px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div style={{ padding: '16px 14px', borderBottom: '1px solid var(--glass-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span style={{ fontWeight: 700, fontSize: '0.86rem', color: 'var(--text-secondary)' }}>CHAT HISTORY</span>
           <button className="btn btn-sm btn-ghost" onClick={handleCreateSession} title="New Chat" style={{ padding: '4px 8px' }}>
-            ＋ New
+            ï¼‹ New
           </button>
         </div>
         <div style={{ flex: 1, overflowY: 'auto', padding: '10px 8px', display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -201,21 +201,21 @@ export default function Chat() {
       {/* Chat Area */}
       <div className="card" style={{ display: 'flex', flexDirection: 'column', padding: 0, overflow: 'hidden' }}>
         {/* Header */}
-        <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--bg-card)', zIndex: 10 }}>
+        <div style={{ padding: '16px 20px', borderBottom: '1px solid var(--glass-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'var(--surface)', zIndex: 10 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <div className="chat-avatar ai" style={{ width: 40, height: 40, fontSize: '1.2rem' }}>🧠</div>
             <div>
-              <h3 style={{ fontSize: '1.05rem', fontFamily: 'Outfit', lineHeight: 1.1 }}>{user.ai_name}</h3>
+              <h3 style={{ fontSize: '1.05rem', fontFamily: 'var(--font-heading)', lineHeight: 1.1 }}>{user.ai_name}</h3>
               <span style={{ fontSize: '0.78rem', color: sessionLoading ? 'var(--text-muted)' : 'var(--success)', display: 'flex', alignItems: 'center', gap: 4 }}>
                 <span style={{ width: 8, height: 8, borderRadius: '50%', background: sessionLoading ? 'var(--text-muted)' : 'var(--success)', display: 'inline-block' }}></span>{' '}
                 {sessionLoading ? 'Loading Chat…' : 'Online'}
               </span>
             </div>
           </div>
-          
-          <button 
+
+          <button
             className={`btn btn-sm ${ttsOn ? 'btn-primary' : 'btn-secondary'}`}
-            onClick={() => { setTtsOn(!ttsOn); if(ttsOn) stopSpeaking() }}
+            onClick={() => { setTtsOn(!ttsOn); if (ttsOn) stopSpeaking() }}
           >
             {ttsOn ? '🔊 Voice On' : '🔇 Voice Off'}
           </button>
@@ -225,7 +225,7 @@ export default function Chat() {
         <div style={{ flex: 1, overflowY: 'auto', padding: '24px 24px', display: 'flex', flexDirection: 'column' }}>
           <AnimatePresence>
             {messages.map(m => (
-              <motion.div 
+              <motion.div
                 key={m.id}
                 initial={{ opacity: 0, y: 10, scale: 0.98 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -249,7 +249,7 @@ export default function Chat() {
               <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className={`chat-message ai`}>
                 <div className={`chat-avatar ai`}>🧠</div>
                 <div className={`chat-bubble ai`} style={{ padding: '8px 16px' }}>
-                  <div className="ai-thinking"><span/><span/><span/></div>
+                  <div className="ai-thinking"><span /><span /><span /></div>
                 </div>
               </motion.div>
             )}
@@ -258,11 +258,11 @@ export default function Chat() {
         </div>
 
         {/* Input */}
-        <div style={{ padding: '16px 20px', borderTop: '1px solid var(--border)', background: 'var(--bg-tertiary)', display: 'flex', gap: 10, alignItems: 'flex-end' }}>
-          
+        <div style={{ padding: '16px 20px', borderTop: '1px solid var(--glass-border)', background: 'var(--surface-2)', display: 'flex', gap: 10, alignItems: 'flex-end' }}>
+
           {supported && (
-            <button 
-              className={`mic-btn ${isListening ? 'recording' : 'idle'}`} 
+            <button
+              className={`mic-btn ${isListening ? 'recording' : 'idle'}`}
               style={{ width: 46, height: 46, flexShrink: 0 }}
               onClick={toggleVoice}
               title={isListening ? 'Stop recording' : 'Speak'}
@@ -272,23 +272,23 @@ export default function Chat() {
           )}
 
           <div style={{ flex: 1, position: 'relative' }}>
-             {isListening && (
+            {isListening && (
               <div style={{ position: 'absolute', bottom: '100%', left: 0, marginBottom: 8, padding: '4px 12px', background: 'var(--danger)', color: 'white', borderRadius: 12, fontSize: '0.75rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6, animation: 'pulse-ring 1.5s infinite' }}>
-                 Listening… {transcript && <span style={{ opacity: 0.8, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{transcript}</span>}
+                Listening… {transcript && <span style={{ opacity: 0.8, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{transcript}</span>}
               </div>
             )}
-            <textarea 
+            <textarea
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={isListening ? "Listening..." : "Message SkillLens... (Shift+Enter for new line)"}
-              style={{ width: '100%', minHeight: 46, maxHeight: 120, resize: 'none', padding: '12px 16px', background: 'var(--bg-card)' }}
+              placeholder={isListening ? "Listening..." : "Message CareerCoach AI... (Shift+Enter for new line)"}
+              style={{ width: '100%', minHeight: 46, maxHeight: 120, resize: 'none', padding: '12px 16px', background: 'var(--surface)' }}
               disabled={loading || isListening || sessionLoading}
             />
           </div>
 
-          <button 
-            className="btn btn-primary" 
+          <button
+            className="btn btn-primary"
             style={{ width: 46, height: 46, borderRadius: 'var(--radius-sm)', padding: 0, justifyContent: 'center', flexShrink: 0 }}
             onClick={() => handleSend()}
             disabled={loading || !input.trim() || isListening || sessionLoading || !sessionId}

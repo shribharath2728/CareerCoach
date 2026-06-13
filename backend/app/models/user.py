@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, Integer, String, DateTime
+from sqlalchemy import Boolean, Column, Integer, String, DateTime, Date
 from sqlalchemy.orm import relationship
 from app.db.database import Base
 from datetime import datetime
@@ -11,10 +11,17 @@ class User(Base):
     full_name = Column(String, nullable=False, default="User")
     hashed_password = Column(String, nullable=False)
     is_guest = Column(Boolean, default=False)
+    theme = Column(String, nullable=False, default="dark")
     ai_model = Column(String, nullable=True)
     ai_language = Column(String, nullable=True)
     ai_voice = Column(String, nullable=True)
     ai_name = Column(String, nullable=True, default="Nova")
+    telegram_id = Column(String, unique=True, nullable=True)
+    field_of_study = Column(String, nullable=True) # e.g. "Arts"
+    education_level = Column(String, nullable=True) # e.g. "Masters"
+    coaching_style = Column(String, nullable=True, default="supportive") # strict|supportive|speed_drill|academic
+    streak_count = Column(Integer, nullable=False, default=0)
+    last_practice_date = Column(Date, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     resumes = relationship("Resume", back_populates="user")

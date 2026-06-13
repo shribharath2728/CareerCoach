@@ -40,6 +40,7 @@ def start_interview(body: InterviewStartRequest, db: Session = Depends(get_db)):
             body.role,
             body.interview_type,
             body.difficulty,
+            body.field_of_study,
         )
         return s
     except Exception as e:

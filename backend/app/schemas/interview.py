@@ -6,6 +6,7 @@ class InterviewStartRequest(BaseModel):
     role: str
     interview_type: str
     difficulty: str
+    field_of_study: Optional[str] = None
 
 class InterviewSessionResponse(BaseModel):
     id: int

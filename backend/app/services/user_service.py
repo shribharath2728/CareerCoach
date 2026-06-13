@@ -29,6 +29,7 @@ def create_user_service(db: Session, payload: UserCreate) -> User:
         full_name=payload.full_name or "User",
         hashed_password=_hash(payload.password),
         is_guest=payload.is_guest,
+        theme=payload.theme or "dark",
         ai_name="Nova",
     )
     db.add(user)
