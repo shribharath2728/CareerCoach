@@ -490,11 +490,13 @@ def _initialize_rag_knowledge_defaults(engine: Engine) -> None:
         
         from app.models.rag_knowledge import RAGKnowledge
         for default in defaults:
-            # Check if entry already exists by ID
-            existing = session.query(RAGKnowledge).filter_by(id=default.get("id")).first()
+            # Check if entry already exists by looking up the content
+            existing = session.query(RAGKnowledge).filter_by(
+                category=default["category"],
+                source="default"
+            ).first()
             if not existing:
                 entry = RAGKnowledge(
-                    id=default.get("id"),
                     category=default["category"],
                     tags=",".join(default.get("tags", [])),
                     content=default["text"],

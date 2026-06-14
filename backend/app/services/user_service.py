@@ -1,19 +1,41 @@
 import secrets
+import hashlib
+import base64
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
-from passlib.context import CryptContext
 from app.models.user import User
 from app.schemas.user import UserCreate, UserUpdateSettings
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
 def _hash(pw: str) -> str:
+    """
+    Simple PBKDF2 hashing that doesn't have bcrypt's 72-byte limitation.
+    More secure than plain SHA256 and compatible with all password lengths.
+    """
     if not pw:
-        return pwd_context.hash(secrets.token_hex(16))
-    return pwd_context.hash(pw)
+        pw = secrets.token_hex(8)  # Random password for guests
+    
+    # Use PBKDF2 with SHA256 (100k iterations is industry standard)
+    salt = secrets.token_bytes(32)
+    key = hashlib.pbkdf2_hmac('sha256', pw.encode('utf-8'), salt, 100000)
+    
+    # Return salt + key encoded in base64 for storage
+    return base64.b64encode(salt + key).decode('utf-8')
 
 def verify_password(plain: str, hashed: str) -> bool:
-    return pwd_context.verify(plain, hashed)
+    """Verify a plain password against a PBKDF2 hash."""
+    try:
+        # Decode the stored hash
+        decoded = base64.b64decode(hashed)
+        salt = decoded[:32]
+        stored_key = decoded[32:]
+        
+        # Derive key from plain password using the same salt
+        key = hashlib.pbkdf2_hmac('sha256', plain.encode('utf-8'), salt, 100000)
+        
+        # Compare keys (constant-time comparison)
+        return secrets.compare_digest(key, stored_key)
+    except Exception:
+        return False
 
 def get_user_by_email(db: Session, email: str) -> User | None:
     return db.query(User).filter(User.email == email).first()
